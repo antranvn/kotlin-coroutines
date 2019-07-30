@@ -19,7 +19,8 @@ package com.example.android.kotlincoroutines.main
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.example.android.kotlincoroutines.util.BACKGROUND
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.*
 
 /**
  * MainViewModel designed to store and manage UI-related data in a lifecycle conscious way. This
@@ -28,6 +29,20 @@ import com.example.android.kotlincoroutines.util.BACKGROUND
  * results after the new Fragment or Activity is available.
  */
 class MainViewModel : ViewModel() {
+
+    /**
+     * In Kotlin, all coroutines run inside a CoroutineScope.
+     * A scope controls the lifetime of coroutines through its job
+     */
+    private val viewModelJob = Job()
+
+    /**
+     * uiScope will start coroutines in Dispatchers.Main which is the main thread on Android. A coroutine
+     * started on the main won't block the main thread while suspended. Since a ViewModel, coroutine
+     * almost always updates the UI on the main thread, starting coroutines on the main thread is resonable
+     * default. A coroutine can switch dispatchers any time after it's started
+     */
+    private val uiScope = CoroutineScope(Dispatchers.Main + viewModelJob)
 
     /**
      * Request a snackbar to display a string.
@@ -45,16 +60,27 @@ class MainViewModel : ViewModel() {
     val snackbar: LiveData<String>
         get() = _snackBar
 
+    private fun makeNetworkRequest() {
+        // launch a coroutine in viewModelScope
+        viewModelScope.launch(Dispatchers.IO) {
+            //slowFetch() here
+        }
+    }
+
     /**
      * Wait one second then display a snackbar.
      */
     fun onMainViewClicked() {
-        // TODO: Replace with coroutine implementation
-        BACKGROUND.submit {
-            Thread.sleep(1_000)
-            // use postValue since we're in a background thread
-            _snackBar.postValue("Hello, from threads!")
+        // Use viewModelScope to avoid boilerplate code
+        // launch a coroutine in viewModelScope
+        viewModelScope.launch {
+            // suspend this coroutine for one
+            delay(1_000)
+            // resume in the main dispatcher
+            // _snackbar.value can be called directly from main thread
+            _snackBar.value = "Hello, from coroutines!"
         }
+
     }
 
     /**
@@ -62,5 +88,11 @@ class MainViewModel : ViewModel() {
      */
     fun onSnackbarShown() {
         _snackBar.value = null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Cancel the scope when ViewModel is cleared
+        //viewModelJob.cancel()
     }
 }
